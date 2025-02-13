@@ -1,5 +1,6 @@
 首先，将完成第四步后的setting部分保存（截图、复制…）
 使用模版替换（记得改变内容，模版为INF和RW的谱子）
+模版下载：https://wwws.lanzouo.com/igoO12npcy2j
 
 		"version": 12 ,
 		"artist": "<color=#00000000>PIKASONIC", 
