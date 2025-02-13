@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADOFAI 文件转换</title>
+</head>
+<body>
+    <h2>ADOFAI 文件转换器</h2>
+    <input type="file" id="fileInput" accept=".adofai">
+    <button onclick="convertFile()">转换文件</button>
+    <a id="downloadLink" style="display:none">下载转换后的文件</a>
+
+    <script>
+        function convertFile() {
+            const fileInput = document.getElementById("fileInput");
+            if (!fileInput.files.length) {
+                alert("请选择一个 .adofai 文件");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                let fileContent = event.target.result;
+                let modifiedContent = processADOFAI(fileContent);
+
+                let blob = new Blob([modifiedContent], { type: "application/json" });
+                let url = URL.createObjectURL(blob);
+
+                let downloadLink = document.getElementById("downloadLink");
+                downloadLink.href = url;
+                downloadLink.download = file.name.replace(".adofai", "_converted.adofai");
+                downloadLink.textContent = "下载转换后的文件";
+                downloadLink.style.display = "block";
+            };
+
+            reader.readAsText(file);
+        }
+
+        function processADOFAI(fileContent) {
+            let lines = fileContent.split("\n");
+            let result = [];
+            let actionsFound = false;
+
+            // 需要删除的行关键词
+            const specialMethodsAndKeywords = new Set([
+                "SetObject", "AddObject", "SetFilterAdvanced", "SetFloorIcon",
+                "SetDefaultText", "SetFrameRate", "\"targetPlanet\": \"GreenPlanet\"",
+                "EmitParticle", "SetParticle", "AddParticle", "SetInputEvent"
+            ]);
+
+            // 需要忽略的元数据字段
+            const keywordsToSkip = new Set([
+                "\"song\"", "\"artist\"", "\"songFilename\"", "\"author\"", "\"legacyFlash\"",
+                "\"legacyCamRelativeTo\"", "\"legacySpriteTiles\"", "\"artistLinks\"",
+                "\"levelTags\"", "\"levelDesc\"", "\"previewImage\"", "\"previewIcon\"",
+                "\"previewIconColor\"", "\"artistPermission\"", "\"specialArtistType\"",
+                "\"trackTexture\"", "\"bgImage\"", "\"bgVideo\""
+            ]);
+
+            // 事件类型
+            const events = ["ScaleMargin", "ScaleRadius", "ScalePlanets", "Multitap",
+                            "Checkpoint", "RepeatEvents", "PlaySound"];
+
+            lines.forEach(line => {
+                if (!actionsFound && line.includes("\"actions\":")) {
+                    actionsFound = true;
+                }
+
+                // 删除特定行
+                if ([...specialMethodsAndKeywords].some(keyword => line.includes(keyword))) {
+                    return;
+                }
+
+                // 跳过特定的元数据字段
+                if ([...keywordsToSkip].some(keyword => line.includes(keyword))) {
+                    result.push(line);
+                    return;
+                }
+
+                // 处理版本号
+                if (line.trim().startsWith("\"version\":")) {
+                    line = "        \"version\": 11 ,";
+                }
+
+                // 处理角度方向
+                line = line.replace("\"angleCorrectionDir\": \"Backward\"", "\"angleCorrectionDir\": -1 ")
+                           .replace("\"angleCorrectionDir\": \"None\"", "\"angleCorrectionDir\": 0 ")
+                           .replace("\"angleCorrectionDir\": \"Forward\"", "\"angleCorrectionDir\": 1 ");
+
+                // 处理 targetPlanet
+                line = line.replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"");
+
+                // 处理数值范围
+                if (events.some(event => line.includes(`"eventType": "${event}"`))) {
+                    line = modifyNumbers(line);
+                }
+
+                result.push(line);
+            });
+
+            return result.join("\n");
+        }
+
+        function modifyNumbers(line) {
+            // 正则匹配 JSON 数值（包括科学计数法）
+            let pattern = /(:\s*)(-?\d+\.?\d*([eE][+-]?\d+)?)/g;
+
+            return line.replace(pattern, (match, prefix, numStr) => {
+                let num = Number(numStr);
+                if (isNaN(num)) return match; // 非数值则不变
+                if (num > 2147483647) num = 2147483647;
+                if (num < -2147483648) num = -2147483648;
+                return `${prefix}${Math.floor(num)}`;
+            });
+        }
+    </script>
+</body>
+</html>
